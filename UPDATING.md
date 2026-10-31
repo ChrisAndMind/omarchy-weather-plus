@@ -5,6 +5,7 @@ temperature and flow added to the popup.
 
 - `River.js`: parsing, the 24h cache fallback, and formatting. `parseRiverResponse` is the only API-specific code.
 - `RiverRow.qml`: the EISBACH row in the popup.
+- `RiverChart.qml`: the 7-day flow trend, drawn with braille dots (bucketing and rendering live in `River.js`).
 - `Panel.qml`: the stock panel plus a few additions, each marked `// river:`.
 - `Model.js`, `BarWidget.qml`: unchanged from upstream.
 - The cache lives in `~/.local/state/omarchy/river.json`.

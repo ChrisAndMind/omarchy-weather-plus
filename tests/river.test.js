@@ -68,3 +68,52 @@ test('formatting', () => {
   assert.strictEqual(River.formatAge(20 * 1000), 'just now')
   assert.strictEqual(River.formatAge(45 * 60 * 1000), '45m ago')
 })
+
+test('bucketSeries averages points per bucket and leaves gaps null', () => {
+  const start = NOW - 4 * HOUR
+  const points = [
+    { at: start + 0.2 * HOUR, value: 10 },
+    { at: start + 0.8 * HOUR, value: 12 },
+    { at: start + 3.5 * HOUR, value: 20 },
+    { at: start - HOUR, value: 99 },  // before the window
+    { at: start + 2.5 * HOUR, value: null }
+  ]
+  assert.deepStrictEqual(River.bucketSeries(points, start, NOW, 4), [11, null, null, 20])
+})
+
+test('brailleChart draws a rising trace bottom-left to top-right', () => {
+  const { lines, min, max } = River.brailleChart([0, 1, 2, 3, 4, 5, 6, 7], 2)
+  assert.strictEqual(min, 0)
+  assert.strictEqual(max, 7)
+  assert.strictEqual(lines.length, 2)
+  assert.strictEqual(lines[0].length, 4)
+  // Bottom-left dot (dot 7) set first; top-right dot (dot 4) set last.
+  assert.strictEqual(lines[1].charCodeAt(0) & 0x40, 0x40)
+  assert.strictEqual(lines[0].charCodeAt(3) & 0x08, 0x08)
+  assert.strictEqual(lines[0][0], '⠀')
+})
+
+test('brailleChart breaks the line at gaps and handles empty input', () => {
+  const { lines } = River.brailleChart([5, null, null, 5], 1)
+  assert.strictEqual(lines[0].length, 2)
+  assert.notStrictEqual(lines[0][0], '⠀')
+  assert.notStrictEqual(lines[0][1], '⠀')
+  const empty = River.brailleChart([null, null], 1)
+  assert.deepStrictEqual([empty.min, empty.max, empty.lines], [null, null, ['⠀']])
+})
+
+test('dayAxis labels local midnights and drops colliding labels', () => {
+  const start = new Date(2026, 9, 24, 12, 0).getTime()  // Saturday noon, local
+  const end = start + 7 * 24 * HOUR
+  const label = (d) => ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][d.getDay()]
+  const axis = River.dayAxis(start, end, 28, label)
+  assert.strictEqual(axis.length, 28)
+  // Saturday half-day gets 2 columns, too narrow for its label; Sunday starts at column 2.
+  assert.strictEqual(axis.slice(0, 6), '  SU  ')
+  assert.strictEqual(axis.trim().split(/\s+/).join(' '), 'SU MO TU WE TH FR SA')
+})
+
+test('formatFlowRange', () => {
+  assert.strictEqual(River.formatFlowRange(18.24, 24.06), '18.2–24.1 m³/s')
+  assert.strictEqual(River.formatFlowRange(null, null), '')
+})

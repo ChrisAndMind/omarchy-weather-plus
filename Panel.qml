@@ -121,6 +121,8 @@ Panel {
   property var riverCache: ({})
   property var river: null
   property bool riverFetched: false
+  // river: [{at, value}] flow readings for the weekly trend chart.
+  property var riverFlowHistory: []
 
   function applyRiverReading(fresh) {
     var merged = River.mergeRiverReading(fresh, root.riverCache, Date.now())
@@ -929,6 +931,7 @@ Panel {
         bar: root.bar
         river: root.river
         useImperial: root.useImperial
+        flowHistory: root.riverFlowHistory
       }
     }
   }
