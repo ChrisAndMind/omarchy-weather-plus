@@ -5,6 +5,7 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
+import "River.js" as River // river:
 
 Panel {
   id: root
@@ -114,6 +115,45 @@ Panel {
     onTriggered: locationFile.reload()
   }
 
+  // river: Eisbach temperature/flow. riverCache is the last non-null reading
+  // per field (persisted to river.json); river is what RiverRow displays.
+  readonly property string riverUrl: ""
+  property var riverCache: ({})
+  property var river: null
+  property bool riverFetched: false
+
+  function applyRiverReading(fresh) {
+    var merged = River.mergeRiverReading(fresh, root.riverCache, Date.now())
+    root.river = merged.display
+    if (JSON.stringify(merged.cache) === JSON.stringify(root.riverCache)) return
+    root.riverCache = merged.cache
+    riverCacheFile.setText(JSON.stringify(merged.cache, null, 2) + "\n")
+  }
+
+  property FileView riverCacheFile: FileView {
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/river.json"
+    atomicWrites: true
+    printErrors: false
+    onLoaded: {
+      root.riverCache = River.parseCacheFile(text())
+      // Show the cached reading at startup; once a fetch has landed, a
+      // reload (e.g. after our own write) must not mark fresh values stale.
+      if (!root.riverFetched) root.applyRiverReading(null)
+    }
+  }
+
+  Process {
+    id: riverProc
+    command: ["curl", "-fsS", "--max-time", "10", root.riverUrl]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.riverFetched = true
+        root.applyRiverReading(River.parseRiverResponse(text))
+      }
+    }
+  }
+
   property int forecastRetries: 0
   property int dailyForecastRetries: 0
 
@@ -157,6 +197,8 @@ Panel {
     forecastRetries = 0
     dailyForecastRetries = 0
     if (!forecastProc.running) forecastProc.running = true
+    if (root.riverUrl !== "" && !riverProc.running) riverProc.running = true // river:
+    else if (root.riverUrl === "") root.applyRiverReading(null) // river:
     if (root.locationQuery === "" && !locationProc.running) locationProc.running = true
     // With stored coordinates this fetches open-meteo right away — no need
     // to wait for the slow wttr response. Without them it's a no-op until
@@ -873,6 +915,20 @@ Panel {
             }
           }
         }
+      }
+
+      // river: Eisbach temperature and flow below the forecast.
+      Rectangle {
+        width: parent.width
+        height: Style.spacing.hairline
+        color: root.bar.foreground
+        opacity: 0.12
+      }
+
+      RiverRow {
+        bar: root.bar
+        river: root.river
+        useImperial: root.useImperial
       }
     }
   }
