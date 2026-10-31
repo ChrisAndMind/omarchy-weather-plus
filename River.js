@@ -20,23 +20,48 @@ function timestampOrNull(value) {
   return isNaN(ms) ? null : ms
 }
 
-// API response → { temperatureC, flowM3s, measuredAt }. This is the only
-// API-specific code. Missing, null, or non-numeric fields become null, as
-// does everything when the body is empty or not JSON.
-// TODO(api spec): the field names below are placeholders until the river
-// API's real response shape is known.
+// eisbach.chrisvb.dev /api/current → { temperatureC, flowM3s, measuredAt,
+// at }, where `at` holds each field's own measurement time (the temperature
+// gauge reports separately from the flow gauge). A metric is null when its
+// gauge hasn't reported in a while; missing or non-numeric values become
+// null, as does everything when the body is empty or not JSON.
 function parseRiverResponse(raw) {
-  var empty = { temperatureC: null, flowM3s: null, measuredAt: null }
+  var empty = { temperatureC: null, flowM3s: null, measuredAt: null, at: {} }
   try {
     var data = JSON.parse(String(raw || ""))
-    if (!data || typeof data !== "object") return empty
+    var current = data && data.current
+    if (!current || typeof current !== "object") return empty
+    var metrics = current.metrics || {}
+    var temperature = metrics.wassertemperatur || {}
+    var flow = metrics.abfluss || {}
     return {
-      temperatureC: numberOrNull(data.waterTemperature),
-      flowM3s: numberOrNull(data.flow),
-      measuredAt: timestampOrNull(data.measuredAt)
+      temperatureC: numberOrNull(temperature.value),
+      flowM3s: numberOrNull(flow.value),
+      measuredAt: timestampOrNull(current.observed_at),
+      at: { temperatureC: timestampOrNull(temperature.ts), flowM3s: timestampOrNull(flow.ts) }
     }
   } catch (e) {
     return empty
+  }
+}
+
+// /api/history?metric=abfluss&range=7d&bucket=hour → [{at, value}], oldest
+// first. Points with a missing time or value are dropped (the chart shows a
+// gap there); an unusable body yields null so callers can keep what they had.
+function parseFlowHistory(raw) {
+  try {
+    var data = JSON.parse(String(raw || ""))
+    if (!data || !Array.isArray(data.points)) return null
+    var out = []
+    for (var i = 0; i < data.points.length; i++) {
+      var point = data.points[i] || {}
+      var at = timestampOrNull(point.ts)
+      var value = numberOrNull(point.value)
+      if (at !== null && value !== null) out.push({ at: at, value: value })
+    }
+    return out
+  } catch (e) {
+    return null
   }
 }
 
@@ -57,15 +82,15 @@ function parseCacheFile(raw) {
 }
 
 // Combine a fresh reading (or null when the fetch failed) with the cache.
-// Each field is resolved on its own: a fresh value wins and is recorded;
+// Each field is resolved on its own: a fresh value wins and is recorded at
+// its own measurement time (falling back to measuredAt, then now);
 // otherwise a cached value younger than STALE_LIMIT_MS is shown as stale;
 // otherwise the field is null. Returns { display, cache } where display maps
 // each field to { value, stale, ageMs } or null.
 function mergeRiverReading(fresh, cache, nowMs) {
   var reading = fresh || {}
   var previous = cache || {}
-  var recordedAt = timestampOrNull(reading.measuredAt)
-  if (recordedAt === null || recordedAt > nowMs) recordedAt = nowMs
+  var fieldAt = reading.at || {}
 
   var display = {}
   var nextCache = {}
@@ -75,6 +100,9 @@ function mergeRiverReading(fresh, cache, nowMs) {
     var cached = previous[field]
 
     if (value !== null) {
+      var recordedAt = timestampOrNull(fieldAt[field])
+      if (recordedAt === null) recordedAt = timestampOrNull(reading.measuredAt)
+      if (recordedAt === null || recordedAt > nowMs) recordedAt = nowMs
       nextCache[field] = { value: value, at: recordedAt }
       display[field] = { value: value, stale: false, ageMs: nowMs - recordedAt }
       continue
@@ -220,6 +248,7 @@ if (typeof module !== "undefined") {
     formatFlowRange: formatFlowRange,
     STALE_LIMIT_MS: STALE_LIMIT_MS,
     parseRiverResponse: parseRiverResponse,
+    parseFlowHistory: parseFlowHistory,
     parseCacheFile: parseCacheFile,
     mergeRiverReading: mergeRiverReading,
     formatRiverTemp: formatRiverTemp,

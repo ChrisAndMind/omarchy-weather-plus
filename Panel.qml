@@ -117,11 +117,13 @@ Panel {
 
   // river: Eisbach temperature/flow. riverCache is the last non-null reading
   // per field (persisted to river.json); river is what RiverRow displays.
-  readonly property string riverUrl: ""
+  readonly property string riverUrl: "https://eisbach.chrisvb.dev/api/current"
+  readonly property string riverHistoryUrl: "https://eisbach.chrisvb.dev/api/history?metric=abfluss&range=7d&bucket=hour"
   property var riverCache: ({})
   property var river: null
   property bool riverFetched: false
-  // river: [{at, value}] flow readings for the weekly trend chart.
+  // river: [{at, value}] hourly flow for the weekly trend chart. Kept as-is
+  // when a refetch fails, so the chart doesn't blank out while offline.
   property var riverFlowHistory: []
 
   function applyRiverReading(fresh) {
@@ -152,6 +154,18 @@ Panel {
       onStreamFinished: {
         root.riverFetched = true
         root.applyRiverReading(River.parseRiverResponse(text))
+      }
+    }
+  }
+
+  Process {
+    id: riverHistoryProc
+    command: ["curl", "-fsS", "--max-time", "10", root.riverHistoryUrl]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var history = River.parseFlowHistory(text)
+        if (history !== null) root.riverFlowHistory = history
       }
     }
   }
@@ -199,8 +213,8 @@ Panel {
     forecastRetries = 0
     dailyForecastRetries = 0
     if (!forecastProc.running) forecastProc.running = true
-    if (root.riverUrl !== "" && !riverProc.running) riverProc.running = true // river:
-    else if (root.riverUrl === "") root.applyRiverReading(null) // river:
+    if (!riverProc.running) riverProc.running = true // river:
+    if (!riverHistoryProc.running) riverHistoryProc.running = true // river:
     if (root.locationQuery === "" && !locationProc.running) locationProc.running = true
     // With stored coordinates this fetches open-meteo right away — no need
     // to wait for the slow wttr response. Without them it's a no-op until

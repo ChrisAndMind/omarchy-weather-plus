@@ -3,7 +3,8 @@
 A clone of Omarchy's built-in `omarchy.weather` widget, with Eisbach water
 temperature and flow added to the popup.
 
-- `River.js`: parsing, the 24h cache fallback, and formatting. `parseRiverResponse` is the only API-specific code.
+- `River.js`: parsing, the 24h cache fallback, and formatting. `parseRiverResponse` (`/api/current`) and `parseFlowHistory` (`/api/history`) are the only API-specific code.
+- API: `https://eisbach.chrisvb.dev`, no key needed. The URLs are the `riverUrl` and `riverHistoryUrl` properties in `Panel.qml`.
 - `RiverRow.qml`: the EISBACH row in the popup.
 - `RiverChart.qml`: the 7-day flow trend, drawn with braille dots (bucketing and rendering live in `River.js`).
 - `Panel.qml`: the stock panel plus a few additions, each marked `// river:`.
