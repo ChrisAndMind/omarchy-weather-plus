@@ -1,35 +1,44 @@
-# chris.weather
+# Developing Weather+
 
-A clone of Omarchy's built-in `omarchy.weather` widget, with Eisbach water
-temperature and flow added to the popup.
+- `Model.js`: Omarchy's stock weather model, untouched.
+- `BarWidget.qml`, `Panel.qml`: the stock widget, with every addition marked `// plus:`.
+- `SettingsView.qml`: the Modules page in the popup.
+- `core/`: shared by every module. `Fetcher.qml` does fetching, caching and refreshing; `Fetch.js` runs one curl call per refresh; `Cache.js` keeps the last good value; `Braille.js` and `BrailleChart.qml` draw the charts; `Stat.qml` and `StatsLine.qml` lay out the rows.
+- `modules/<id>/Source.js` + `Row.qml`: one folder per module. `modules/Registry.js` lists them, and the contract is documented at its top.
+- Caches: `~/.local/state/omarchy/weather-plus-<id>.json`, keyed by the URLs they came from.
 
-- `River.js`: parsing, the 24h cache fallback, and formatting. `parseRiverResponse` (`/api/current`) and `parseFlowHistory` (`/api/history`) are the only API-specific code.
-- API: `https://eisbach.chrisvb.dev`, no key needed. The URLs are the `riverUrl` and `riverHistoryUrl` properties in `Panel.qml`.
-- `RiverRow.qml`: the EISBACH row in the popup.
-- `RiverChart.qml`: the 7-day flow trend, drawn with braille dots (bucketing and rendering live in `River.js`).
-- `Panel.qml`: the stock panel plus a few additions, each marked `// river:`.
-- `Model.js`, `BarWidget.qml`: unchanged from upstream.
-- The cache lives in `~/.local/state/omarchy/river.json`.
+Tests: `node --test tests/`. Validate: `omarchy plugin validate .`
 
-Tests: `node --test tests/`
+## Dev loop
 
-After editing, run `omarchy restart shell`. The shell's hot reload doesn't
-reliably pick up changes to this plugin.
+The repo is symlinked into the shell's plugin folder:
+
+```bash
+ln -s ~/Work/omarchy-weather-plus ~/.config/omarchy/plugins/chrisvb.weather-plus
+omarchy-shell shell rescanPlugins && omarchy plugin enable chrisvb.weather-plus
+```
+
+The shell's hot reload doesn't follow the symlink, so after editing run
+`omarchy restart shell`. QML warnings land in the newest
+`/run/user/$UID/quickshell/by-id/*/log.log`.
 
 ## Bringing in an Omarchy update to the stock weather widget
 
 The `upstream` branch holds the untouched stock files; `main` has our changes on top.
 
 ```bash
-cd ~/.config/omarchy/plugins/chris.weather
-diff -rq /usr/share/omarchy/shell/plugins/panels/weather . -x manifest.json -x .git   # anything new upstream?
+cd ~/Work/omarchy-weather-plus
+diff -q /usr/share/omarchy/shell/plugins/panels/weather/Model.js Model.js   # anything new upstream?
+diff -q /usr/share/omarchy/shell/plugins/panels/weather/Panel.qml <(git show upstream:Panel.qml)
 
 git checkout upstream
 cp /usr/share/omarchy/shell/plugins/panels/weather/{BarWidget.qml,Model.js,Panel.qml} .   # plus any new files
 git commit -am "Omarchy $(omarchy version) weather widget"
 git checkout main
-git merge upstream          # conflicts can only be in Panel.qml, around the `// river:` lines
+git merge upstream          # conflicts can only be in Panel.qml/BarWidget.qml, around the `// plus:` lines
 node --test tests/ && omarchy restart shell
 ```
 
-Keep this clone's `manifest.json`: it carries the `chris.weather` id.
+Keep this repo's `manifest.json`: it carries the `chrisvb.weather-plus` id,
+which also has to match `moduleName`/`ipcTarget` in `BarWidget.qml` and
+`Panel.qml`. The shell only lets a plugin write settings to its own id.
