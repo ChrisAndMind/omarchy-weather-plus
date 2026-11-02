@@ -5,12 +5,20 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
-import "River.js" as River // river:
+import "core" // plus:
+import "modules/Registry.js" as Registry // plus:
+import "modules/alerts/Source.js" as AlertsSource // plus:
+import "modules/rain/Source.js" as RainSource // plus:
+import "modules/air/Source.js" as AirSource // plus:
+import "modules/sun/Source.js" as SunSource // plus:
+import "modules/tides/Source.js" as TidesSource // plus:
+import "modules/swell/Source.js" as SwellSource // plus:
+import "modules/eisbach/Source.js" as EisbachSource // plus:
 
 Panel {
   id: root
-  moduleName: "omarchy.weather"
-  ipcTarget: "omarchy.weather"
+  moduleName: "chrisvb.weather-plus" // plus:
+  ipcTarget: "chrisvb.weather-plus" // plus:
   manageIpc: false
 
   property var anchorItem: null
@@ -50,6 +58,7 @@ Panel {
   function close() {
     setCenterHoverRevealSuppressed(false)
     if (root.editingLocation) root.cancelEditingLocation()
+    root.settingsOpen = false // plus:
     root.controller.hide()
   }
 
@@ -115,58 +124,98 @@ Panel {
     onTriggered: locationFile.reload()
   }
 
-  // river: Eisbach temperature/flow. riverCache is the last non-null reading
-  // per field (persisted to river.json); river is what RiverRow displays.
-  readonly property string riverUrl: "https://eisbach.chrisvb.dev/api/current"
-  readonly property string riverHistoryUrl: "https://eisbach.chrisvb.dev/api/history?metric=abfluss&range=7d&bucket=hour"
-  property var riverCache: ({})
-  property var river: null
-  property bool riverFetched: false
-  // river: [{at, value}] hourly flow for the weekly trend chart. Kept as-is
-  // when a refetch fails, so the chart doesn't blank out while offline.
-  property var riverFlowHistory: []
+  // plus: optional modules (modules/Registry.js). One Fetcher per module
+  // keeps its data fresh while it's enabled; moduleState is what the rows
+  // and the bar pill read: { <id>: { entry, status } }.
+  readonly property var moduleSources: ({
+    alerts: AlertsSource, rain: RainSource, air: AirSource, sun: SunSource,
+    tides: TidesSource, swell: SwellSource, eisbach: EisbachSource
+  })
+  property var moduleState: ({})
+  property bool settingsOpen: false
+  readonly property var enabledModules: Registry.enabledIds(root.settings)
+  readonly property string cacheDir: Quickshell.env("HOME") + "/.local/state/omarchy"
 
-  function applyRiverReading(fresh) {
-    var merged = River.mergeRiverReading(fresh, root.riverCache, Date.now())
-    root.river = merged.display
-    if (JSON.stringify(merged.cache) === JSON.stringify(root.riverCache)) return
-    root.riverCache = merged.cache
-    riverCacheFile.setText(JSON.stringify(merged.cache, null, 2) + "\n")
+  // Coordinates the modules use: the configured location, else the area
+  // wttr detected. The coast spot (tides, swell) falls back to the same.
+  readonly property var weatherCoordinates: {
+    var lat = parseFloat(String(configuredLocationState.latitude))
+    var lon = parseFloat(String(configuredLocationState.longitude))
+    if ((isNaN(lat) || isNaN(lon)) && areaInfo) {
+      lat = parseFloat(String(areaInfo.latitude || ""))
+      lon = parseFloat(String(areaInfo.longitude || ""))
+    }
+    return isNaN(lat) || isNaN(lon) ? null : { latitude: lat, longitude: lon }
   }
-
-  property FileView riverCacheFile: FileView {
-    path: Quickshell.env("HOME") + "/.local/state/omarchy/river.json"
-    atomicWrites: true
-    printErrors: false
-    onLoaded: {
-      root.riverCache = River.parseCacheFile(text())
-      // Show the cached reading at startup; once a fetch has landed, a
-      // reload (e.g. after our own write) must not mark fresh values stale.
-      if (!root.riverFetched) root.applyRiverReading(null)
+  readonly property var moduleContext: {
+    var coords = weatherCoordinates
+    var spotLat = parseFloat(String(setting("spotLatitude", "")))
+    var spotLon = parseFloat(String(setting("spotLongitude", "")))
+    var spot = !isNaN(spotLat) && !isNaN(spotLon)
+      ? { name: String(setting("spotName", "")), latitude: spotLat, longitude: spotLon }
+      : coords ? { name: reportLocation, latitude: coords.latitude, longitude: coords.longitude } : null
+    return {
+      latitude: coords ? coords.latitude : NaN,
+      longitude: coords ? coords.longitude : NaN,
+      spot: spot,
+      imperial: useImperial,
+      language: Qt.locale().name.indexOf("de") === 0 ? "de" : "en",
+      settings: root.settings
     }
   }
 
-  Process {
-    id: riverProc
-    command: ["curl", "-fsS", "--max-time", "10", root.riverUrl]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        root.riverFetched = true
-        root.applyRiverReading(River.parseRiverResponse(text))
-      }
-    }
+  // Ticks once a minute so countdowns ("rain in 25 min", "now" on the tide
+  // curve) and the pill move without a refetch.
+  property real now: Date.now()
+  Timer {
+    interval: 60 * 1000
+    running: true
+    repeat: true
+    onTriggered: root.now = Date.now()
   }
 
-  Process {
-    id: riverHistoryProc
-    command: ["curl", "-fsS", "--max-time", "10", root.riverHistoryUrl]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var history = River.parseFlowHistory(text)
-        if (history !== null) root.riverFlowHistory = history
-      }
+  function publishModule(id, entry, status) {
+    var next = {}
+    for (var key in root.moduleState) next[key] = root.moduleState[key]
+    next[id] = { entry: entry, status: status }
+    root.moduleState = next
+  }
+
+  // Text beside the bar icon from the module picked in settings, "" for
+  // the stock icon-only pill.
+  readonly property string pillText: {
+    var id = Registry.pillModule(root.settings)
+    var state = id ? root.moduleState[id] : null
+    if (!state || !state.entry || state.entry.value === null) return ""
+    return root.moduleSources[id].compact(state.entry.value, root.moduleContext, root.now,
+      function(ms) { return Qt.formatTime(new Date(ms), "HH:mm") })
+  }
+
+  // Applied locally first so the panel redraws on the click itself; the
+  // shell.json write comes back through the bar as the same value.
+  function persistSettings(values) {
+    var entry = { id: root.moduleName }
+    for (var existing in root.settings) if (existing !== "id") entry[existing] = root.settings[existing]
+    for (var key in values) entry[key] = values[key]
+    root.settings = entry
+    if (root.hostWidget && "settings" in root.hostWidget) root.hostWidget.settings = entry
+    if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
+      root.bar.shell.updateEntryInline(root.moduleName, entry)
+  }
+
+  Repeater {
+    model: Registry.MODULES
+
+    Fetcher {
+      required property var modelData
+      moduleId: modelData.id
+      source: root.moduleSources[modelData.id]
+      ctx: root.moduleContext
+      active: root.enabledModules.indexOf(modelData.id) !== -1
+      refreshMinutes: modelData.refreshMinutes
+      cachePath: root.cacheDir + "/weather-plus-" + modelData.id + ".json"
+      onEntryChanged: root.publishModule(moduleId, entry, status)
+      onStatusChanged: root.publishModule(moduleId, entry, status)
     }
   }
 
@@ -213,8 +262,6 @@ Panel {
     forecastRetries = 0
     dailyForecastRetries = 0
     if (!forecastProc.running) forecastProc.running = true
-    if (!riverProc.running) riverProc.running = true // river:
-    if (!riverHistoryProc.running) riverHistoryProc.running = true // river:
     if (root.locationQuery === "" && !locationProc.running) locationProc.running = true
     // With stored coordinates this fetches open-meteo right away — no need
     // to wait for the slow wttr response. Without them it's a no-op until
@@ -543,6 +590,7 @@ Panel {
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
     function edit(): void { root.openFromHotkey(); root.startEditingLocation() }
+    function settings(): void { root.openFromHotkey(); root.settingsOpen = true } // plus:
   }
 
   KeyboardPanel {
@@ -554,27 +602,39 @@ Panel {
     centerOnBar: true
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(480))
-    contentHeight: panel.fittedContentHeight(weatherColumn.implicitHeight)
+    contentHeight: panel.fittedContentHeight(root.settingsOpen ? settingsView.implicitHeight : weatherColumn.implicitHeight) // plus:
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      blocked: root.editingLocation
-      onReturnRequested: root.startEditingLocation()
-      onCloseRequested: root.close()
+      blocked: root.editingLocation || (root.settingsOpen && settingsView.editingSpot) // plus:
+      onReturnRequested: if (!root.settingsOpen) root.startEditingLocation()
+      onCloseRequested: root.settingsOpen ? root.settingsOpen = false : root.close() // plus:
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
       Flickable {
         id: weatherScroll
         anchors.fill: parent
         contentWidth: width
-        contentHeight: weatherColumn.implicitHeight
+        contentHeight: root.settingsOpen ? settingsView.implicitHeight : weatherColumn.implicitHeight // plus:
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         interactive: contentHeight > height
 
+        // plus: the settings page replaces the forecast while it's open.
+        SettingsView {
+          id: settingsView
+          visible: root.settingsOpen
+          width: weatherScroll.width
+          bar: root.bar
+          settings: root.settings
+          onChanged: function(values) { root.persistSettings(values) }
+          onDone: root.settingsOpen = false
+        }
+
         Column {
           id: weatherColumn
+          visible: !root.settingsOpen // plus:
           width: weatherScroll.width
           spacing: Style.space(14)
 
@@ -933,19 +993,56 @@ Panel {
         }
       }
 
-      // river: Eisbach temperature and flow below the forecast.
-      Rectangle {
-        width: parent.width
-        height: Style.spacing.hairline
-        color: root.bar.foreground
-        opacity: 0.12
+      // plus: enabled modules below the forecast, each under a divider.
+      Repeater {
+        model: root.enabledModules
+
+        Column {
+          id: moduleSlot
+          required property string modelData
+          width: weatherColumn.width
+          spacing: Style.space(14)
+
+          Rectangle {
+            width: parent.width
+            height: Style.spacing.hairline
+            color: root.bar.foreground
+            opacity: 0.12
+          }
+
+          Loader {
+            width: parent.width
+            source: Qt.resolvedUrl("modules/" + moduleSlot.modelData + "/Row.qml")
+            onLoaded: {
+              var id = moduleSlot.modelData
+              item.bar = Qt.binding(function() { return root.bar })
+              item.ctx = Qt.binding(function() { return root.moduleContext })
+              item.now = Qt.binding(function() { return root.now })
+              item.entry = Qt.binding(function() { return root.moduleState[id] ? root.moduleState[id].entry : null })
+              item.status = Qt.binding(function() { return root.moduleState[id] ? root.moduleState[id].status : "loading" })
+            }
+          }
+        }
       }
 
-      RiverRow {
-        bar: root.bar
-        river: root.river
-        useImperial: root.useImperial
-        flowHistory: root.riverFlowHistory
+      // plus: the way into the settings page, and the only hint that there
+      // are modules on a fresh install.
+      Text {
+        anchors.right: parent.right
+        anchors.rightMargin: Style.space(20)
+        text: "󰒓  " + (root.enabledModules.length ? "Modules" : "Add tides, rain, air & more")
+        color: customizeMouse.containsMouse ? Commons.Color.accent : Qt.darker(root.bar.foreground, 1.6)
+        font.family: root.bar.fontFamily
+        font.pixelSize: Style.font.caption
+
+        MouseArea {
+          id: customizeMouse
+          anchors.fill: parent
+          anchors.margins: -Style.space(6)
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.settingsOpen = true
+        }
       }
     }
   }

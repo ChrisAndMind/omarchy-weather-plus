@@ -1,97 +1,57 @@
 import QtQuick
 import qs.Commons
-import "River.js" as River
+import "../../core"
+import "Source.js" as Eisbach
 
-// Eisbach water temperature and flow, styled like the hero's FEELS/WIND/HUMID
-// stats. Stale values (API returned null, cached reading < 24h old) are
-// dimmed and carry their age; missing values read "-". The weekly flow
-// trend sits underneath.
+// Eisbach water temperature and flow. Stale values (API returned null,
+// cached reading < 24h old) are dimmed and carry their age; missing values
+// read "-". The weekly flow trend sits underneath.
 Column {
   id: row
 
   property var bar: null
-  property var river: null
-  property bool useImperial: false
-  property var flowHistory: []
+  property var entry: null
+  property string status: ""
+  property var ctx: ({})
+  property real now: Date.now()
 
+  readonly property var river: entry ? entry.value : null
   readonly property var temperature: river ? river.temperatureC : null
   readonly property var flow: river ? river.flowM3s : null
 
   width: parent ? parent.width : implicitWidth
   spacing: Style.space(14)
 
-  component Stat: Column {
-    property string label: ""
-    property string value: ""
-    property var entry: null
+  StatsLine {
+    bar: row.bar
+    title: "EISBACH"
+    message: row.river ? "" : (row.status === "failed" ? "Unavailable" : "Fetching…")
 
-    spacing: Style.space(5)
-
-    Text {
-      text: parent.label
-      color: Qt.darker(row.bar.foreground, 1.5)
-      font.family: row.bar.fontFamily
-      font.pixelSize: Style.font.bodySmall
-      font.letterSpacing: 1
+    Stat {
+      bar: row.bar
+      label: "WATER"
+      value: Eisbach.formatRiverTemp(row.temperature, row.ctx.imperial)
+      stale: !!row.temperature && row.temperature.stale
+      ageMs: row.temperature ? row.temperature.ageMs : 0
     }
-    Text {
-      textFormat: Text.PlainText
-      text: parent.value
-      opacity: parent.entry && parent.entry.stale ? 0.5 : 1
-      color: row.bar.foreground
-      font.family: row.bar.fontFamily
-      font.pixelSize: Style.font.title
-    }
-    Text {
-      visible: !!parent.entry && parent.entry.stale
-      textFormat: Text.PlainText
-      text: parent.entry ? River.formatAge(parent.entry.ageMs) : ""
-      color: Qt.darker(row.bar.foreground, 1.5)
-      font.family: row.bar.fontFamily
-      font.pixelSize: Style.font.caption
-      font.italic: true
+    Stat {
+      bar: row.bar
+      label: "FLOW"
+      value: Eisbach.formatRiverFlow(row.flow)
+      stale: !!row.flow && row.flow.stale
+      ageMs: row.flow ? row.flow.ageMs : 0
     }
   }
 
-  Item {
-    width: parent.width
-    height: Math.max(riverName.implicitHeight, stats.implicitHeight)
-
-    Text {
-      id: riverName
-      anchors.left: parent.left
-      anchors.leftMargin: Style.space(16)
-      anchors.verticalCenter: parent.verticalCenter
-      text: "EISBACH"
-      color: Qt.darker(row.bar.foreground, 1.4)
-      font.family: row.bar.fontFamily
-      font.pixelSize: Style.font.body
-      font.letterSpacing: 1
-    }
-
-    Row {
-      id: stats
-      anchors.right: parent.right
-      anchors.rightMargin: Style.space(20)
-      anchors.verticalCenter: parent.verticalCenter
-      spacing: Style.space(36)
-
-      Stat {
-        label: "WATER"
-        entry: row.temperature
-        value: River.formatRiverTemp(row.temperature, row.useImperial)
-      }
-      Stat {
-        label: "FLOW"
-        entry: row.flow
-        value: River.formatRiverFlow(row.flow)
-      }
-    }
-  }
-
-  RiverChart {
+  BrailleChart {
+    visible: !!row.river
     width: parent.width
     bar: row.bar
-    history: row.flowHistory
+    title: "FLOW · 7D"
+    history: row.river ? row.river.history : []
+    fromMs: -Eisbach.HISTORY_WINDOW_MS
+    toMs: 0
+    formatValue: function(value) { return value.toFixed(1) + " m³/s" }
+    formatRange: function(min, max) { return Eisbach.formatFlowRange(min, max) }
   }
 }

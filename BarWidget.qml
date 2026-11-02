@@ -4,14 +4,14 @@ import qs.Ui
 
 BarWidget {
   id: root
-  moduleName: "omarchy.weather"
+  moduleName: "chrisvb.weather-plus" // plus:
 
   function injectPanel() {
     var target = panelLoader.item
     if (!target) return
     if ("bar" in target) target.bar = root.bar
     if ("settings" in target) target.settings = root.settings
-    if ("anchorItem" in target) target.anchorItem = button
+    if ("anchorItem" in target) target.anchorItem = root.activeButton // plus:
     if ("hostWidget" in target) target.hostWidget = root
   }
 
@@ -47,11 +47,23 @@ BarWidget {
   }
 
   visible: panelLoader.item && panelLoader.item.label !== ""
-  implicitWidth: button.implicitWidth
-  implicitHeight: button.implicitHeight
+  // plus: a module's text beside the icon (Settings › In the bar) swaps the
+  // fixed-width icon button for a text button. Vertical bars keep the icon.
+  readonly property string pillText: panelLoader.item && !root.vertical ? panelLoader.item.pillText : ""
+  readonly property Item activeButton: pillText !== "" ? textButton : button
+  implicitWidth: activeButton.implicitWidth
+  implicitHeight: activeButton.implicitHeight
+
+  function handlePress(b) {
+    if (!root.bar) return
+    if (b === Qt.RightButton) root.bar.run("omarchy-notification-send \"$(omarchy-weather-status)\"")
+    else if (b === Qt.MiddleButton) root.refresh()
+    else root.togglePanel()
+  }
 
   onBarChanged: injectPanel()
   onSettingsChanged: injectPanel()
+  onActiveButtonChanged: injectPanel() // plus:
 
   Loader {
     id: panelLoader
@@ -66,6 +78,7 @@ BarWidget {
 
   BarIconButton {
     id: button
+    visible: root.activeButton === button // plus:
     anchors.fill: parent
     bar: root.bar
     text: panelLoader.item ? panelLoader.item.label : ""
@@ -73,11 +86,17 @@ BarWidget {
     // Tooltip suppressed because the panel is the detail view.
     tooltipText: ""
 
-    onPressed: function(b) {
-      if (!root.bar) return
-      if (b === Qt.RightButton) root.bar.run("omarchy-notification-send \"$(omarchy-weather-status)\"")
-      else if (b === Qt.MiddleButton) root.refresh()
-      else root.togglePanel()
-    }
+    onPressed: function(b) { root.handlePress(b) }
+  }
+
+  // plus:
+  WidgetButton {
+    id: textButton
+    visible: root.activeButton === textButton
+    anchors.fill: parent
+    bar: root.bar
+    text: (panelLoader.item ? panelLoader.item.label : "") + "  " + root.pillText
+    tooltipText: ""
+    onPressed: function(b) { root.handlePress(b) }
   }
 }

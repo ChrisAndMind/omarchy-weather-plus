@@ -1,10 +1,11 @@
 {
   "schemaVersion": 1,
-  "id": "chris.weather",
-  "name": "My Weather",
-  "version": "1.0.0",
-  "author": "Omarchy",
-  "description": "Weather pill with detail popup",
+  "id": "chrisvb.weather-plus",
+  "name": "Weather+",
+  "version": "0.1.0",
+  "author": "chrisvb",
+  "license": "MIT",
+  "description": "The stock weather widget plus optional modules you switch on: rain radar, weather warnings, air & pollen, sun & moon, tides, swell and Munich's Eisbach.",
   "kinds": [
     "bar-widget"
   ],
@@ -12,13 +13,132 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "My Weather",
-    "description": "Weather pill with detail popup",
+    "displayName": "Weather+",
+    "description": "Weather with optional rain radar, warnings, air & pollen, sun & moon, tides, swell and Eisbach.",
     "category": "Info",
     "allowMultiple": false,
-    "settingsForm": "weatherSettings"
-  },
-  "omarchy": {
-    "clonedFrom": "omarchy.weather"
+    "defaults": {
+      "unit": "auto",
+      "refreshMinutes": 15,
+      "showAlerts": false,
+      "showRain": false,
+      "showAir": false,
+      "showSun": false,
+      "showTides": false,
+      "showSwell": false,
+      "showEisbach": false,
+      "spotName": "",
+      "spotLatitude": "",
+      "spotLongitude": "",
+      "pillModule": "none"
+    },
+    "schema": [
+      {
+        "key": "unit",
+        "type": "enum",
+        "label": "Units",
+        "options": [
+          "auto",
+          "metric",
+          "imperial"
+        ],
+        "defaultValue": "auto",
+        "description": "auto follows your locale and the location's country."
+      },
+      {
+        "key": "refreshMinutes",
+        "type": "number",
+        "label": "Weather refresh (minutes)",
+        "min": 5,
+        "max": 120,
+        "step": 5,
+        "defaultValue": 15
+      },
+      {
+        "key": "showAlerts",
+        "type": "boolean",
+        "label": "Weather warnings",
+        "defaultValue": false,
+        "description": "Official DWD warnings for your location (Germany only)."
+      },
+      {
+        "key": "showRain",
+        "type": "boolean",
+        "label": "Rain radar",
+        "defaultValue": false,
+        "description": "When rain starts or stops in the next two hours."
+      },
+      {
+        "key": "showAir",
+        "type": "boolean",
+        "label": "Air & pollen",
+        "defaultValue": false,
+        "description": "European air quality index, UV and the strongest pollen (Europe)."
+      },
+      {
+        "key": "showSun",
+        "type": "boolean",
+        "label": "Sun & moon",
+        "defaultValue": false,
+        "description": "Sunrise, sunset, golden hour, daylight gained and the moon phase."
+      },
+      {
+        "key": "showTides",
+        "type": "boolean",
+        "label": "Tides",
+        "defaultValue": false,
+        "description": "Next high and low tide with a curve, at your coast spot."
+      },
+      {
+        "key": "showSwell",
+        "type": "boolean",
+        "label": "Swell",
+        "defaultValue": false,
+        "description": "Swell, sea temperature and wind at your coast spot."
+      },
+      {
+        "key": "showEisbach",
+        "type": "boolean",
+        "label": "Eisbach",
+        "defaultValue": false,
+        "description": "Water temperature and flow of Munich's Eisbach."
+      },
+      {
+        "key": "spotName",
+        "type": "string",
+        "label": "Coast spot name",
+        "defaultValue": "",
+        "description": "For tides and swell. Easier to set from the panel: open it and click Modules."
+      },
+      {
+        "key": "spotLatitude",
+        "type": "string",
+        "label": "Coast spot latitude",
+        "defaultValue": ""
+      },
+      {
+        "key": "spotLongitude",
+        "type": "string",
+        "label": "Coast spot longitude",
+        "defaultValue": ""
+      },
+      {
+        "key": "pillModule",
+        "type": "enum",
+        "label": "In the bar",
+        "options": [
+          "none",
+          "alerts",
+          "rain",
+          "air",
+          "sun",
+          "tides",
+          "swell",
+          "eisbach"
+        ],
+        "defaultValue": "none",
+        "description": "A module's short reading next to the weather icon, e.g. the next tide or rain countdown."
+      }
+    ]
   }
 }

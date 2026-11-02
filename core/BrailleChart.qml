@@ -1,17 +1,28 @@
 import QtQuick
 import qs.Commons
-import "River.js" as River
+import "Braille.js" as Braille
 
-// Seven-day flow trend as a braille-dot plot. The header shows the week's
-// range, or the hovered bucket's time and value; a day axis runs underneath.
-// Fewer than two readings shows a "collecting" note instead of an empty plot.
+// A time series as a braille-dot plot over a window relative to now (the
+// past week for Eisbach flow, the next two days for swell). The header
+// shows the window's range, or the hovered bucket's time and value; a day
+// axis runs underneath. Fewer than two readings shows `emptyText` instead
+// of an empty plot.
 Column {
   id: chart
 
   property var bar: null
-  // [{at, value}] flow readings in m³/s, any order, any span.
+  // [{at, value}] readings, any order, any span.
   property var history: []
   property int rows: 3
+  property string title: ""
+  property string emptyText: "collecting readings…"
+  // Window edges relative to now.
+  property real fromMs: -7 * 24 * 60 * 60 * 1000
+  property real toMs: 0
+  property var formatValue: function(value) { return value.toFixed(1) }
+  property var formatRange: function(min, max) {
+    return min === null ? "" : chart.formatValue(min) + " – " + chart.formatValue(max)
+  }
 
   property var buckets: []
   property var plot: ({ lines: [], min: null, max: null })
@@ -30,18 +41,19 @@ Column {
   spacing: Style.space(4)
 
   function rebuild() {
-    endMs = Date.now()
-    startMs = endMs - River.CHART_WINDOW_MS
-    buckets = River.bucketSeries(history, startMs, endMs, chars * 2)
-    plot = River.brailleChart(buckets, rows)
-    axis = River.dayAxis(startMs, endMs, axisChars, function(date) { return Qt.formatDate(date, "ddd").toUpperCase() })
+    var now = Date.now()
+    startMs = now + fromMs
+    endMs = now + toMs
+    buckets = Braille.bucketSeries(history, startMs, endMs, chars * 2)
+    plot = Braille.brailleChart(buckets, rows)
+    axis = Braille.dayAxis(startMs, endMs, axisChars, function(date) { return Qt.formatDate(date, "ddd").toUpperCase() })
   }
 
   function hoverLabel() {
     var value = buckets[hoverIndex]
     if (value === null || value === undefined) return "no reading"
     var at = new Date(startMs + (hoverIndex + 0.5) * (endMs - startMs) / buckets.length)
-    return Qt.formatDateTime(at, "ddd HH:00").toUpperCase() + " · " + value.toFixed(1) + " m³/s"
+    return Qt.formatDateTime(at, "ddd HH:00").toUpperCase() + " · " + chart.formatValue(value)
   }
 
   onHistoryChanged: rebuild()
@@ -70,7 +82,7 @@ Column {
       id: header
       anchors.left: parent.left
       anchors.leftMargin: Style.space(16)
-      text: "FLOW · 7D"
+      text: chart.title
       color: Qt.darker(chart.bar.foreground, 1.5)
       font.family: chart.bar.fontFamily
       font.pixelSize: Style.font.bodySmall
@@ -81,7 +93,7 @@ Column {
       anchors.rightMargin: Style.space(20)
       anchors.baseline: header.baseline
       textFormat: Text.PlainText
-      text: chart.hoverIndex >= 0 ? chart.hoverLabel() : River.formatFlowRange(chart.plot.min, chart.plot.max)
+      text: chart.hoverIndex >= 0 ? chart.hoverLabel() : chart.formatRange(chart.plot.min, chart.plot.max)
       color: Qt.darker(chart.bar.foreground, 1.5)
       font.family: chart.bar.fontFamily
       font.pixelSize: Style.font.caption
@@ -92,7 +104,7 @@ Column {
   Text {
     visible: chart.readingCount < 2
     x: Style.space(16)
-    text: "collecting readings…"
+    text: chart.emptyText
     color: Qt.darker(chart.bar.foreground, 1.5)
     font.family: chart.bar.fontFamily
     font.pixelSize: Style.font.bodySmall
