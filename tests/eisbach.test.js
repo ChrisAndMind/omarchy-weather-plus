@@ -1,6 +1,8 @@
 const test = require('node:test')
 const assert = require('node:assert')
-const River = require('../River.js')
+const River = require('../modules/eisbach/Source.js')
+const Braille = require('../core/Braille.js')
+const Cache = require('../core/Cache.js')
 
 const NOW = Date.UTC(2026, 9, 31, 12, 0)
 const HOUR = 60 * 60 * 1000
@@ -48,7 +50,7 @@ test('null within 24h falls back to the cached value as stale', () => {
   const fresh = River.parseRiverResponse(current({ temp: null, flow: null }))
   const { display } = River.mergeRiverReading(fresh, cache, NOW)
   assert.deepStrictEqual(display.temperatureC, { value: 13.8, stale: true, ageMs: 3 * HOUR })
-  assert.strictEqual(River.formatAge(display.temperatureC.ageMs), '3h ago')
+  assert.strictEqual(Cache.formatAge(display.temperatureC.ageMs), '3h ago')
 })
 
 test('a metric object with a null value counts as missing', () => {
@@ -96,8 +98,8 @@ test('formatting', () => {
   assert.strictEqual(River.formatRiverTemp({ value: 15 }, true), '59.0°F')
   assert.strictEqual(River.formatRiverFlow({ value: 21.46 }), '21.5 m³/s')
   assert.strictEqual(River.formatRiverFlow(null), '-')
-  assert.strictEqual(River.formatAge(20 * 1000), 'just now')
-  assert.strictEqual(River.formatAge(45 * 60 * 1000), '45m ago')
+  assert.strictEqual(Cache.formatAge(20 * 1000), 'just now')
+  assert.strictEqual(Cache.formatAge(45 * 60 * 1000), '45m ago')
 })
 
 test('bucketSeries averages points per bucket and leaves gaps null', () => {
@@ -109,11 +111,11 @@ test('bucketSeries averages points per bucket and leaves gaps null', () => {
     { at: start - HOUR, value: 99 },  // before the window
     { at: start + 2.5 * HOUR, value: null }
   ]
-  assert.deepStrictEqual(River.bucketSeries(points, start, NOW, 4), [11, null, null, 20])
+  assert.deepStrictEqual(Braille.bucketSeries(points, start, NOW, 4), [11, null, null, 20])
 })
 
 test('brailleChart draws a rising trace bottom-left to top-right', () => {
-  const { lines, min, max } = River.brailleChart([0, 1, 2, 3, 4, 5, 6, 7], 2)
+  const { lines, min, max } = Braille.brailleChart([0, 1, 2, 3, 4, 5, 6, 7], 2)
   assert.strictEqual(min, 0)
   assert.strictEqual(max, 7)
   assert.strictEqual(lines.length, 2)
@@ -125,11 +127,11 @@ test('brailleChart draws a rising trace bottom-left to top-right', () => {
 })
 
 test('brailleChart breaks the line at gaps and handles empty input', () => {
-  const { lines } = River.brailleChart([5, null, null, 5], 1)
+  const { lines } = Braille.brailleChart([5, null, null, 5], 1)
   assert.strictEqual(lines[0].length, 2)
   assert.notStrictEqual(lines[0][0], '⠀')
   assert.notStrictEqual(lines[0][1], '⠀')
-  const empty = River.brailleChart([null, null], 1)
+  const empty = Braille.brailleChart([null, null], 1)
   assert.deepStrictEqual([empty.min, empty.max, empty.lines], [null, null, ['⠀']])
 })
 
@@ -137,7 +139,7 @@ test('dayAxis labels local midnights and drops colliding labels', () => {
   const start = new Date(2026, 9, 24, 12, 0).getTime()  // Saturday noon, local
   const end = start + 7 * 24 * HOUR
   const label = (d) => ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][d.getDay()]
-  const axis = River.dayAxis(start, end, 28, label)
+  const axis = Braille.dayAxis(start, end, 28, label)
   assert.strictEqual(axis.length, 28)
   // Saturday half-day gets 2 columns, too narrow for its label; Sunday starts at column 2.
   assert.strictEqual(axis.slice(0, 6), '  SU  ')
