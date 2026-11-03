@@ -46,8 +46,8 @@ BarWidget {
     if (panelLoader.item) panelLoader.item.closeForPopoutSwitch()
   }
 
-  // plus: stay visible without a wttr.in reading (offline icon), so the
-  // modules and the pill keep working when wttr.in is down.
+  // plus: stay visible without a weather reading (offline icon), so the
+  // modules and the pill keep working while the forecast can't be fetched.
   visible: !!panelLoader.item
   readonly property string iconText: panelLoader.item && panelLoader.item.label !== "" ? panelLoader.item.label : "\u{F0164}"
   // plus: a module's text beside the icon (Settings › In the bar) swaps the
@@ -57,9 +57,15 @@ BarWidget {
   implicitWidth: activeButton.implicitWidth
   implicitHeight: activeButton.implicitHeight
 
+  // plus: built from the panel's own data instead of omarchy-weather-status.
+  function notifyStatus() {
+    var text = panelLoader.item ? panelLoader.item.statusText() : "Weather unavailable"
+    root.bar.run("omarchy-notification-send '" + text.replace(/'/g, "'\\''") + "'")
+  }
+
   function handlePress(b) {
     if (!root.bar) return
-    if (b === Qt.RightButton) root.bar.run("omarchy-notification-send \"$(omarchy-weather-status)\"")
+    if (b === Qt.RightButton) root.notifyStatus() // plus:
     else if (b === Qt.MiddleButton) root.refresh()
     else root.togglePanel()
   }

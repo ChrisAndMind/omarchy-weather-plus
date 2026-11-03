@@ -46,6 +46,26 @@ editable from the popup (**Modules**), from Setup, or by hand:
 The weather location is shared with the stock widget
 (`omarchy-weather-location`, or click the place name in the popup).
 
+## Where the data comes from
+
+The forecast and current conditions come from [Open-Meteo](https://open-meteo.com),
+which serves the national weather models (DWD ICON for Germany, ECMWF
+elsewhere). Unlike the stock widget, Weather+ doesn't use wttr.in.
+
+With no location set, Weather+ finds one by itself:
+
+1. **IP lookup:** one HTTPS request to [ipinfo.io](https://ipinfo.io)
+   (no key) for the city of your IP address, repeated every 6 hours so a
+   laptop picks up its new city.
+2. **Timezone:** if that fails, it uses the main city of your system
+   timezone (`/etc/localtime` and tzdata's `zone1970.tab`). This works
+   offline but is coarse: Munich shows as Berlin.
+
+The result is kept in `~/.local/state/omarchy/weather-plus-location.json`,
+so a restart or an offline start still knows where it is. Set a location
+in the popup to skip detection entirely; then nothing about your IP leaves
+the machine beyond the Open-Meteo requests themselves.
+
 ```bash
 omarchy bar set chrisvb.weather-plus showTides true --json
 omarchy bar set chrisvb.weather-plus pillModule tides

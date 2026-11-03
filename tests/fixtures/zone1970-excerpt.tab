@@ -1,0 +1,7 @@
+# tzdb timezone descriptions
+#
+# This file is in the public domain.
+AR	-3436-05827	America/Argentina/Buenos_Aires	Buenos Aires (BA, CF)
+AU	-3352+15113	Australia/Sydney	New South Wales (most areas)
+DE,DK,NO,SE,SJ	+5230+01322	Europe/Berlin	most of Germany
+US	+404251-0740023	America/New_York	Eastern (most areas)
