@@ -145,7 +145,34 @@ Panel {
       lat = parseFloat(String(areaInfo.latitude || ""))
       lon = parseFloat(String(areaInfo.longitude || ""))
     }
+    if ((isNaN(lat) || isNaN(lon)) && lastArea) {
+      lat = lastArea.latitude
+      lon = lastArea.longitude
+    }
     return isNaN(lat) || isNaN(lon) ? null : { latitude: lat, longitude: lon }
+  }
+
+  // The last area wttr detected, kept on disk so the modules still know
+  // where they are while wttr.in is unreachable.
+  property var lastArea: null
+  property FileView lastAreaFile: FileView {
+    path: root.cacheDir + "/weather-plus-location.json"
+    printErrors: false
+    onLoaded: {
+      try {
+        var stored = JSON.parse(text())
+        if (typeof stored.latitude === "number" && typeof stored.longitude === "number") root.lastArea = stored
+      } catch (e) {}
+    }
+  }
+  onAreaInfoChanged: {
+    if (!areaInfo) return
+    var lat = parseFloat(String(areaInfo.latitude || ""))
+    var lon = parseFloat(String(areaInfo.longitude || ""))
+    if (isNaN(lat) || isNaN(lon)) return
+    if (lastArea && lastArea.latitude === lat && lastArea.longitude === lon) return
+    lastArea = { latitude: lat, longitude: lon }
+    lastAreaFile.setText(JSON.stringify(lastArea))
   }
   readonly property var moduleContext: {
     var coords = weatherCoordinates

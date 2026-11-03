@@ -46,7 +46,10 @@ BarWidget {
     if (panelLoader.item) panelLoader.item.closeForPopoutSwitch()
   }
 
-  visible: panelLoader.item && panelLoader.item.label !== ""
+  // plus: stay visible without a wttr.in reading (offline icon), so the
+  // modules and the pill keep working when wttr.in is down.
+  visible: !!panelLoader.item
+  readonly property string iconText: panelLoader.item && panelLoader.item.label !== "" ? panelLoader.item.label : "\u{F0164}"
   // plus: a module's text beside the icon (Settings › In the bar) swaps the
   // fixed-width icon button for a text button. Vertical bars keep the icon.
   readonly property string pillText: panelLoader.item && !root.vertical ? panelLoader.item.pillText : ""
@@ -81,7 +84,7 @@ BarWidget {
     visible: root.activeButton === button // plus:
     anchors.fill: parent
     bar: root.bar
-    text: panelLoader.item ? panelLoader.item.label : ""
+    text: root.iconText // plus:
     slotSize: Style.bar.statusSlot
     // Tooltip suppressed because the panel is the detail view.
     tooltipText: ""
@@ -95,7 +98,7 @@ BarWidget {
     visible: root.activeButton === textButton
     anchors.fill: parent
     bar: root.bar
-    text: (panelLoader.item ? panelLoader.item.label : "") + "  " + root.pillText
+    text: root.iconText + "  " + root.pillText
     tooltipText: ""
     onPressed: function(b) { root.handlePress(b) }
   }
