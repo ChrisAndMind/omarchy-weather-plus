@@ -119,3 +119,4 @@ changes to Omarchy's weather widget.
 MIT. The core weather popup is derived from Omarchy's built-in weather
 plugin.
 # omarchy-weather-plus
+# omarchy-weather-plus
