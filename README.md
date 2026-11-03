@@ -22,7 +22,7 @@ temperature. Pick it under **Modules › In the bar**.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/<your-github-user>/omarchy-weather-plus.git --enable
+omarchy plugin add https://github.com/ChrisAndMind/omarchy-weather-plus.git --enable
 ```
 
 It lands in the bar next to your current weather widget. To replace the
@@ -118,6 +118,3 @@ changes to Omarchy's weather widget.
 
 MIT. The core weather popup is derived from Omarchy's built-in weather
 plugin.
-# omarchy-weather-plus
-# omarchy-weather-plus
-# omarchy-weather-plus
